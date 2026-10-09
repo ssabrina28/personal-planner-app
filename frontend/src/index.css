@@ -1,5 +1,5 @@
 :root {
-  --primary: #8FC06D;
+  --primary: #9CCB7A;
   --secondary: #E9B949;
   --danger: #DC6F82;
   --text: #2E3A2A;
@@ -16,22 +16,21 @@
   background-color: var(--bg);
 }
 
-body.dark-mode {
-  --text: #EAF0E0;
-  --text-light: #A9B39E;
-  --bg: #131811;
-  --bg-light: #242D21;
-  --border: #34402F;
-  --white: #1C231A;
-}
-
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+html, body, #root {
+  min-height: 100%;
+  height: 100%;
+}
+
 body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--text);
   transition: background-color 0.3s, color 0.3s;
 }
 
@@ -59,6 +58,10 @@ input:focus, textarea:focus, select:focus {
   box-shadow: 0 0 0 3px rgba(143, 192, 109, 0.1);
 }
 
+h1, h2, h3, h4, p {
+  margin-top: 0;
+}
+
 h1 {
   font-size: 2rem;
   margin-bottom: 1rem;
@@ -82,3 +85,31 @@ a {
 a:hover {
   text-decoration: underline;
 }
+
+.loader {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-size: 1.4rem;
+  color: var(--text-light);
+}
+
+.error-message {
+  color: var(--danger);
+}
+
+@media (max-width: 560px) {
+  body {
+    font-size: 14px;
+  }
+}
+
+#root {
+  min-height: 100vh;
+}
+
+
+
++
++
