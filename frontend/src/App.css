@@ -1,0 +1,14 @@
+.loader {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-size: 1.5rem;
+  color: var(--text-light);
+}
+
+.app {
+  min-height: 100vh;
+  background-color: var(--bg);
+  color: var(--text);
+}
