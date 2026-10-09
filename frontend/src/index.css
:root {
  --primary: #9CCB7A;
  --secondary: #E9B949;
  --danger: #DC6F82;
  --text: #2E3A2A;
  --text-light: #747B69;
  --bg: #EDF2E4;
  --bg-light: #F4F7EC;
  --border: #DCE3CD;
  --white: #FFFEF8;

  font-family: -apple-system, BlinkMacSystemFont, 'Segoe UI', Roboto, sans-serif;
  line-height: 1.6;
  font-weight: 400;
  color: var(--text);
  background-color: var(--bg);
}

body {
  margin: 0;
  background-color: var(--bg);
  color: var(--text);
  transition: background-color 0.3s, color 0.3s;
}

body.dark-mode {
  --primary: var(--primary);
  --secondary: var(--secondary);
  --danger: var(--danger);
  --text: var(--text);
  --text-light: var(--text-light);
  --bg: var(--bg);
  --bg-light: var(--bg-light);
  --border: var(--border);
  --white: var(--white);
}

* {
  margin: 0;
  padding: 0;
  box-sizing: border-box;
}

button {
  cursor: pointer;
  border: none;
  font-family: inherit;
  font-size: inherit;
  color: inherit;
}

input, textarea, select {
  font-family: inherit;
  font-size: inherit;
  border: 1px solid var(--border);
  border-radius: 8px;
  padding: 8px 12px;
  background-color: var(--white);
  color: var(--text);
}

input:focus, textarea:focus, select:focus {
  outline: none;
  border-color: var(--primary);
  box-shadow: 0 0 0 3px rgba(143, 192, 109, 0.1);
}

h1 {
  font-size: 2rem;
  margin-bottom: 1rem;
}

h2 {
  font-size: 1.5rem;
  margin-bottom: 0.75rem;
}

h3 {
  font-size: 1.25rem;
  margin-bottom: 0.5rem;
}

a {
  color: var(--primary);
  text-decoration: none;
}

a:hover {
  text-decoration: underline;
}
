@@ -1,0 +1,62 @@
+import { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import AuthContext from './context/AuthContext';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Dashboard from './pages/Dashboard';
+import PrivateRoute from './components/PrivateRoute';
+import { applyTheme } from './themes';
+import './App.css';
+
+function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [darkMode, setDarkMode] = useState(localStorage.getItem('themeMode') === 'dark');
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.user) {
+            setUser(data.user);
+            setDarkMode(Boolean(data.user.darkMode));
+            localStorage.setItem('themeMode', data.user.darkMode ? 'dark' : 'light');
+          }
+          setLoading(false);
+        })
+        .catch(() => {
+          localStorage.removeItem('token');
+          setLoading(false);
+        });
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('themeMode', darkMode ? 'dark' : 'light');
+    const selectedTheme = user?.theme || localStorage.getItem('themePreset') || 'sapitos';
+    applyTheme(selectedTheme, darkMode);
+  }, [darkMode, user?.theme]);
+
+  if (loading) return <div className="loader">Cargando...</div>;
+
+  return (
+    <AuthContext.Provider value={{ user, setUser, darkMode, setDarkMode }}>
+      <Router>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </Router>
+    </AuthContext.Provider>
+  );
+}
+
+export default App;
