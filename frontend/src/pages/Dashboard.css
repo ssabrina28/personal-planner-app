@@ -1,314 +1,376 @@
-import { useContext, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import AuthContext from '../context/AuthContext';
-import { THEMES, applyTheme, THEME_LIST } from '../themes';
-import './Dashboard.css';
-
-const EMPTY_FORM = {
-  type: 'task',
-  title: '',
-  description: '',
-  date: new Date().toISOString().slice(0, 10),
-  amount: 0,
-};
-
-function Dashboard() {
-  const { user, setUser, darkMode, setDarkMode } = useContext(AuthContext);
-  const [entries, setEntries] = useState([]);
-  const [summary, setSummary] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [newEntry, setNewEntry] = useState(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
-
-  const token = localStorage.getItem('token');
-  const currentTheme = user?.theme || 'sapitos';
-
-  const loadData = async () => {
-    if (!token) return;
-
-    try {
-      const [entriesRes, summaryRes] = await Promise.all([
-        fetch('/api/planner/entries', {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch('/api/planner/summary', {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
-
-      if (entriesRes.ok) setEntries(await entriesRes.json());
-      if (summaryRes.ok) setSummary(await summaryRes.json());
-    } catch (error) {
-      console.error('Error cargando datos:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (user?.theme) {
-      applyTheme(user.theme, darkMode);
-    }
-  }, [darkMode, user?.theme]);
-
-  useEffect(() => {
-    loadData();
-  }, [token]);
-
-  const handleThemeChange = async (nextTheme) => {
-    if (!user) return;
-
-    const nextUser = { ...user, theme: nextTheme };
-    setUser(nextUser);
-    applyTheme(nextTheme, darkMode);
-
-    try {
-      await fetch('/api/auth/theme', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ theme: nextTheme, darkMode }),
-      });
-    } catch (error) {
-      console.error('No se pudo guardar el tema', error);
-    }
-  };
-
-  const handleDarkToggle = async () => {
-    const nextDarkMode = !darkMode;
-    setDarkMode(nextDarkMode);
-    if (user) {
-      setUser({ ...user, darkMode: nextDarkMode });
-    }
-
-    try {
-      await fetch('/api/auth/theme', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ theme: currentTheme, darkMode: nextDarkMode }),
-      });
-    } catch (error) {
-      console.error('No se pudo guardar el modo oscuro', error);
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('themePreset');
-    setUser(null);
-    navigate('/login');
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-
-    if (!newEntry.title.trim()) {
-      setError('El título es obligatorio');
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      const payload = {
-        ...newEntry,
-        title: newEntry.title.trim(),
-        description: newEntry.description.trim(),
-        amount: Number(newEntry.amount || 0),
-      };
-
-      const response = await fetch('/api/planner/entries', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'No se pudo guardar');
-      }
-
-      setNewEntry(EMPTY_FORM);
-      await loadData();
-    } catch (error) {
-      setError(error.message || 'Ocurrió un error inesperado');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (loading) return <div className="loader">Cargando tu agenda...</div>;
-
-  return (
-    <div className="dashboard">
-      <header className="dashboard-header">
-        <div className="header-left">
-          <h1>{THEMES[currentTheme]?.emoji || '🌿'} Personal Planner</h1>
-          <p>Bienvenido, {user?.name}</p>
-        </div>
-        <div className="header-right">
-          <button
-            className="btn-theme"
-            onClick={handleDarkToggle}
-            title={darkMode ? 'Modo claro' : 'Modo oscuro'}
-          >
-            {darkMode ? '☀️' : '🌙'}
-          </button>
-          <button className="btn-logout" onClick={handleLogout}>
-            Salir
-          </button>
-        </div>
-      </header>
-
-      <main className="dashboard-content">
-        <section className="theme-panel">
-          <div className="theme-panel-header">
-            <h2>🎨 Elige tu tema</h2>
-          </div>
-          <div className="theme-grid">
-            {THEME_LIST.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                className={`theme-option ${currentTheme === item.value ? 'active' : ''}`}
-                onClick={() => handleThemeChange(item.value)}
-              >
-                <span className="theme-emoji">{item.emoji}</span>
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="composer-panel">
-          <div className="composer-header">
-            <h2>➕ Nueva entrada</h2>
-          </div>
-
-          <form className="entry-form" onSubmit={handleSubmit}>
-            <div className="field-row">
-              <label>
-                Tipo
-                <select
-                  value={newEntry.type}
-                  onChange={(e) => setNewEntry((prev) => ({ ...prev, type: e.target.value }))}
-                >
-                  <option value="task">Tarea</option>
-                  <option value="event">Evento</option>
-                  <option value="note">Nota</option>
-                  <option value="finance">Finanzas</option>
-                  <option value="habit">Hábito</option>
-                </select>
-              </label>
-
-              <label>
-                Fecha
-                <input
-                  type="date"
-                  value={newEntry.date}
-                  onChange={(e) => setNewEntry((prev) => ({ ...prev, date: e.target.value }))}
-                />
-              </label>
-            </div>
-
-            <label>
-              Título
-              <input
-                type="text"
-                placeholder="Ej: Hacer ejercicio, Reunión, Comprar leche"
-                value={newEntry.title}
-                onChange={(e) => setNewEntry((prev) => ({ ...prev, title: e.target.value }))}
-              />
-            </label>
-
-            <label>
-              Descripción
-              <textarea
-                rows="3"
-                placeholder="Describe la actividad o recordatorio"
-                value={newEntry.description}
-                onChange={(e) => setNewEntry((prev) => ({ ...prev, description: e.target.value }))}
-              />
-            </label>
-
-            {newEntry.type === 'finance' && (
-              <label>
-                Monto
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={newEntry.amount}
-                  onChange={(e) => setNewEntry((prev) => ({ ...prev, amount: e.target.value }))}
-                />
-              </label>
-            )}
-
-            {error && <div className="error-message">{error}</div>}
-
-            <button type="submit" className="btn-primary" disabled={saving}>
-              {saving ? 'Guardando...' : 'Guardar entrada'}
-            </button>
-          </form>
-        </section>
-
-        <div className="summary-cards">
-          {summary && (
-            <>
-              <div className="card card-tasks">
-                <h3>📋 Tareas</h3>
-                <p className="card-number">{summary.taskCount}</p>
-              </div>
-              <div className="card card-events">
-                <h3>📅 Eventos</h3>
-                <p className="card-number">{summary.eventCount}</p>
-              </div>
-              <div className="card card-notes">
-                <h3>📝 Notas</h3>
-                <p className="card-number">{summary.noteCount}</p>
-              </div>
-              <div className="card card-finance">
-                <h3>💰 Balance</h3>
-                <p className="card-number">${summary.totalFinance.toFixed(2)}</p>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="entries-section">
-          <h2>Tus últimas entradas</h2>
-          {entries.length === 0 ? (
-            <p className="empty-message">No tienes entradas aún. ¡Empieza a planificar!</p>
-          ) : (
-            <div className="entries-list">
-              {entries.slice(0, 6).map((entry) => (
-                <div key={entry._id} className={`entry entry-${entry.type}`}>
-                  <div className="entry-header">
-                    <h4>{entry.title}</h4>
-                    <span className="entry-type">{entry.type}</span>
-                  </div>
-                  <p>{entry.description || 'Sin descripción'}</p>
-                  <small>{new Date(entry.date).toLocaleDateString('es-ES')}</small>
-                  {entry.amount > 0 && <small>Monto: ${Number(entry.amount).toFixed(2)}</small>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
-  );
+.dashboard {
+  min-height: 100vh;
+  background-color: var(--bg);
+  color: var(--text);
 }
 
-export default Dashboard;
+.dashboard-header {
+  background-color: var(--white);
+  padding: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid var(--border);
+  box-shadow: 0 2px 8px rgba(46, 58, 42, 0.05);
+}
+
+.dashboard-header h1 {
+  margin: 0;
+  color: var(--primary);
+  font-size: 1.75rem;
+}
+
+.dashboard-header p {
+  margin: 0.25rem 0 0;
+  color: var(--text-light);
+  font-size: 0.9rem;
+}
+
+.header-right {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.btn-theme,
+.btn-logout {
+  padding: 8px 16px;
+  border: 2px solid var(--border);
+  background-color: var(--bg-light);
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: all 0.3s;
+}
+
+.btn-theme:hover,
+.btn-logout:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn-logout {
+  background-color: var(--danger);
+  color: white;
+  border-color: var(--danger);
+}
+
+.btn-logout:hover {
+  background-color: var(--danger);
+  border-color: var(--danger);
+  opacity: 0.9;
+}
+
+.dashboard-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.theme-panel {
+  background-color: var(--white);
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: 0 2px 8px rgba(46, 58, 42, 0.05);
+  margin-bottom: 2rem;
+}
+
+.theme-panel-header h2 {
+  margin: 0 0 1rem;
+  color: var(--text);
+}
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.75rem;
+}
+
+.theme-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.9rem 0.75rem;
+  border-radius: 12px;
+  background: var(--bg-light);
+  border: 2px solid transparent;
+  color: var(--text);
+  transition: all 0.2s ease;
+}
+
+.theme-option:hover {
+  border-color: var(--primary);
+  transform: translateY(-2px);
+}
+
+.theme-option.active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 18%, var(--white));
+}
+
+.theme-emoji {
+  font-size: 1.7rem;
+}
+
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.card {
+  background-color: var(--white);
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(46, 58, 42, 0.05);
+  border-left: 4px solid var(--primary);
+}
+
+.card h3 {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  color: var(--text-light);
+}
+
+.card-number {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--primary);
+}
+
+.card-events .card-number {
+  color: var(--secondary);
+}
+
+.card-events {
+  border-left-color: var(--secondary);
+}
+
+.card-notes .card-number {
+  color: #8FC1CF;
+}
+
+.card-notes {
+  border-left-color: #8FC1CF;
+}
+
+.card-finance .card-number {
+  color: var(--danger);
+}
+
+.card-finance {
+  border-left-color: var(--danger);
+}
+
+.entries-section {
+  background-color: var(--white);
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(46, 58, 42, 0.05);
+}
+
+.entries-section h2 {
+  margin-top: 0;
+  color: var(--text);
+}
+
+.empty-message {
+  text-align: center;
+  color: var(--text-light);
+  padding: 2rem;
+  font-style: italic;
+}
+
+.entries-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.entry {
+  border-left: 4px solid var(--primary);
+  padding: 1rem;
+  background-color: var(--bg-light);
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.entry:hover {
+  box-shadow: 0 2px 6px rgba(46, 58, 42, 0.1);
+}
+
+.entry-event {
+  border-left-color: var(--secondary);
+}
+
+.entry-note {
+  border-left-color: #8FC1CF;
+}
+
+.entry-finance {
+  border-left-color: var(--danger);
+}
+
+.entry-habit {
+  border-left-color: var(--primary);
+}
+
+.entry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.entry-header h4 {
+  margin: 0;
+  color: var(--text);
+}
+
+.entry-type {
+  background-color: var(--primary);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.entry-event .entry-type {
+  background-color: var(--secondary);
+}
+
+.entry-note .entry-type {
+  background-color: #8FC1CF;
+}
+
+.entry-finance .entry-type {
+  background-color: var(--danger);
+}
+
+.entry p {
+  margin: 0.5rem 0 0;
+  color: var(--text-light);
+  font-size: 0.9rem;
+}
+
+.entry small {
+  display: block;
+  margin-top: 0.5rem;
+  color: var(--text-light);
+  font-size: 0.85rem;
+}
+
+.composer-panel {
+  background-color: var(--white);
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: 0 2px 8px rgba(46, 58, 42, 0.05);
+  margin-bottom: 2rem;
+}
+
+.composer-header h2 {
+  margin: 0 0 1rem;
+  color: var(--text);
+}
+
+.entry-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.entry-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.entry-form input,
+.entry-form select,
+.entry-form textarea {
+  width: 100%;
+  font-weight: 400;
+}
+
+.entry-form textarea {
+  resize: vertical;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+.entry-form .btn-primary {
+  align-self: flex-start;
+  width: auto;
+  margin-top: 0;
+  padding: 10px 24px;
+}
+
+.entry-completed h4 {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.btn-entry {
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background-color: var(--white);
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.btn-entry:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn-entry-delete:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+@media (max-width: 768px) {
+  .dashboard-header {
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+
+  .summary-cards {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+  }
+
+  .card {
+    padding: 1rem;
+  }
+
+  .card-number {
+    font-size: 2rem;
+  }
+
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .entry-form .btn-primary {
+    width: 100%;
+  }
+}

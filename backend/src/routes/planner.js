@@ -58,7 +58,8 @@ router.put('/entries/:id', async (req, res) => {
       return res.status(404).json({ message: 'Entrada no encontrada' });
     }
 
-    Object.assign(entry, req.body);
+    const { user, _id, ...updates } = req.body;
+    Object.assign(entry, updates);
     await entry.save();
 
     res.json(entry);
