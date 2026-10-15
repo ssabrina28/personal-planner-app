@@ -28,11 +28,13 @@ router.post('/register', async (req, res) => {
       name,
       email,
       password: hashedPassword,
+      theme: 'sapitos',
+      darkMode: false,
     });
 
     return res.status(201).json({
       token: createToken(user),
-      user: { id: user._id, name: user.name, email: user.email, theme: user.theme },
+      user: { id: user._id, name: user.name, email: user.email, theme: user.theme, darkMode: user.darkMode },
     });
   } catch (error) {
     return res.status(500).json({ message: 'Error al crear usuario' });
@@ -55,7 +57,7 @@ router.post('/login', async (req, res) => {
 
     return res.json({
       token: createToken(user),
-      user: { id: user._id, name: user.name, email: user.email, theme: user.theme },
+      user: { id: user._id, name: user.name, email: user.email, theme: user.theme, darkMode: user.darkMode },
     });
   } catch (error) {
     return res.status(500).json({ message: 'Error al iniciar sesión' });
@@ -79,7 +81,43 @@ router.get('/me', async (req, res) => {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
-    return res.json({ user: { id: user._id, name: user.name, email: user.email, theme: user.theme } });
+    return res.json({ user: { id: user._id, name: user.name, email: user.email, theme: user.theme, darkMode: user.darkMode } });
+  } catch (error) {
+    return res.status(401).json({ message: 'Token inválido' });
+  }
+});
+
+router.patch('/theme', async (req, res) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'No autorizado' });
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+    const { theme, darkMode } = req.body;
+    const validThemes = ['sapitos', 'unicornios', 'bosque', 'tiburones', 'gatos'];
+
+    if (theme && !validThemes.includes(theme)) {
+      return res.status(400).json({ message: 'Tema no válido' });
+    }
+
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    if (theme) user.theme = theme;
+    if (typeof darkMode === 'boolean') user.darkMode = darkMode;
+
+    await user.save();
+
+    return res.json({
+      user: { id: user._id, name: user.name, email: user.email, theme: user.theme, darkMode: user.darkMode },
+    });
   } catch (error) {
     return res.status(401).json({ message: 'Token inválido' });
   }
